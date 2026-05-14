@@ -43,6 +43,15 @@ class TestRaiseLowerSpread:
         with pytest.raises(ValueError, match="Interval mismatch"):
             raise_lower_spread(RAISE, bad_lower, "6SEC")
 
+    def test_both_empty_returns_empty_list(self):
+        assert raise_lower_spread([], [], "6SEC") == []
+
+    def test_non_numeric_rrp_raises(self):
+        bad = make_fcas("2024-01-15T00:05:00", 0.0, "RAISE6SEC")
+        bad["rrp"] = "N/A"
+        with pytest.raises((ValueError, TypeError)):
+            raise_lower_spread([bad], LOWER[:1], "6SEC")
+
 
 class TestSpreadSummary:
     def setup_method(self):
@@ -61,3 +70,33 @@ class TestSpreadSummary:
     def test_empty_raises(self):
         with pytest.raises(ValueError, match="empty"):
             spread_summary([])
+
+    def test_single_interval_stdev_zero(self):
+        spreads = raise_lower_spread(
+            [make_fcas("2024-01-15T00:05:00", 10.0, "RAISE6SEC")],
+            [make_fcas("2024-01-15T00:05:00", 8.0, "LOWER6SEC")],
+            "6SEC",
+        )
+        summary = spread_summary(spreads)
+        assert summary["n_intervals"] == 1
+        assert summary["stdev_spread"] == pytest.approx(0.0)
+
+    def test_pct_negative_all_negative(self):
+        spreads = raise_lower_spread(
+            [make_fcas("2024-01-15T00:05:00", 3.0, "RAISE6SEC"),
+             make_fcas("2024-01-15T00:10:00", 4.0, "RAISE6SEC")],
+            [make_fcas("2024-01-15T00:05:00", 8.0, "LOWER6SEC"),
+             make_fcas("2024-01-15T00:10:00", 9.0, "LOWER6SEC")],
+            "6SEC",
+        )
+        assert spread_summary(spreads)["pct_negative_spread"] == pytest.approx(100.0)
+
+    def test_pct_negative_all_positive(self):
+        spreads = raise_lower_spread(
+            [make_fcas("2024-01-15T00:05:00", 10.0, "RAISE6SEC"),
+             make_fcas("2024-01-15T00:10:00", 12.0, "RAISE6SEC")],
+            [make_fcas("2024-01-15T00:05:00", 5.0, "LOWER6SEC"),
+             make_fcas("2024-01-15T00:10:00", 6.0, "LOWER6SEC")],
+            "6SEC",
+        )
+        assert spread_summary(spreads)["pct_negative_spread"] == pytest.approx(0.0)
